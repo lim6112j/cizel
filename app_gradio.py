@@ -97,28 +97,55 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
         return text_response_for_turn or "Agent processed the request."
 
 
-# Create the Gradio interface using gr.ChatInterface
-iface = gr.ChatInterface(
-    fn=chat_with_agent,
-    title="LangGraph Agent Chat",
-    description="Chat with the AI agent. It can generate images (e.g., 'draw a picture of a happy dog') or answer questions.",
-    examples=[
-        ["Generate an image of a futuristic city at sunset"],
-        ["What is LangGraph?"],
-        ["Make a picture of a cat programming on a laptop"]
-    ],
-    chatbot=gr.Chatbot(
+# Create a custom interface instead of using ChatInterface
+with gr.Blocks() as iface:
+    gr.Markdown("# LangGraph Agent Chat")
+    gr.Markdown("Chat with the AI agent. It can generate images (e.g., 'draw a picture of a happy dog') or answer questions.")
+    
+    chatbot = gr.Chatbot(
         height=600,
         label="Conversation",
         show_label=True,
-        # Explicitly using tuples format for Gradio 3.x compatibility
-    ),
-    textbox=gr.Textbox(
-        placeholder="Type your message here...",
-        container=False,
-        scale=7
-    ),
-)
+    )
+    
+    with gr.Row():
+        msg = gr.Textbox(
+            placeholder="Type your message here...",
+            scale=7,
+            show_label=False,
+        )
+        submit = gr.Button("Send", variant="primary")
+    
+    # Add example buttons
+    with gr.Accordion("Examples", open=False):
+        examples = gr.Examples(
+            examples=[
+                "Generate an image of a futuristic city at sunset",
+                "What is LangGraph?",
+                "Make a picture of a cat programming on a laptop"
+            ],
+            inputs=msg
+        )
+    
+    # Define the chat function
+    def respond(message, chat_history):
+        if not message:
+            return "", chat_history
+        
+        # Add user message to history
+        chat_history.append((message, None))
+        
+        # Get response from agent
+        response = chat_with_agent(message, chat_history[:-1])
+        
+        # Update the last message with the response
+        chat_history[-1] = (message, response)
+        
+        return "", chat_history
+    
+    # Set up event handlers
+    submit.click(respond, [msg, chatbot], [msg, chatbot])
+    msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
 if __name__ == "__main__":
     # Check for necessary API keys
