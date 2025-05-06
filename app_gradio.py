@@ -28,26 +28,32 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
     Handles a single turn of conversation with the LangGraph agent via Gradio.
     """
     # 1. Convert Gradio history and current user input to LangGraph message format
+    # With type="messages", history is List[Dict[str, str | List[Tuple[str|None, str|None]] | None]]
+    # Each dict is like: {"role": "user", "content": "Hi"} or
+    # {"role": "assistant", "content": "Hello"} or
+    # {"role": "assistant", "content": [("path/to/image.png", "alt_text_or_caption")]}
     langgraph_messages_history: list[BaseMessage] = []
-    for user_msg_str, bot_msg_representation in history:
-        if user_msg_str: # User message
-            langgraph_messages_history.append(HumanMessage(content=user_msg_str))
-        if bot_msg_representation: # Bot message
-            # Bot message can be str or tuple e.g. (image_path,), ("text", image_path)
-            # We need to extract the text part for the AIMessage history
-            text_content_for_history = None
-            if isinstance(bot_msg_representation, tuple):
-                for item in bot_msg_representation:
-                    if isinstance(item, str) and not os.path.exists(item): # Avoid mistaking path for text
-                        text_content_for_history = item
-                        break
-            elif isinstance(bot_msg_representation, str):
-                text_content_for_history = bot_msg_representation
+    for message_dict in history:
+        role = message_dict.get("role")
+        content = message_dict.get("content")
+
+        if role == "user" and isinstance(content, str):
+            langgraph_messages_history.append(HumanMessage(content=content))
+        elif role == "assistant":
+            text_for_ai_message = None
+            if isinstance(content, str): # Assistant's response was pure text
+                text_for_ai_message = content
+            elif isinstance(content, list) and content: # Assistant's response included an image
+                # content is like [(filepath, alt_text_or_None)]
+                # The alt_text is the textual part of the bot's response for that turn.
+                first_element = content[0] # Assuming one primary (image, caption) tuple per turn
+                if isinstance(first_element, tuple) and len(first_element) > 1 and first_element[1]:
+                    text_for_ai_message = str(first_element[1])
+                # If no alt_text (first_element[1] is None), text_for_ai_message remains None.
+                # This should be handled by ensuring our function always returns text with an image.
             
-            if text_content_for_history:
-                langgraph_messages_history.append(AIMessage(content=text_content_for_history))
-            # If bot response was only an image, no AIMessage text is added for that turn in history.
-            # The LLM should still get the human prompts.
+            if text_for_ai_message: # Only add AIMessage if we have text content
+                langgraph_messages_history.append(AIMessage(content=text_for_ai_message))
 
     current_turn_human_message = HumanMessage(content=user_input)
     complete_input_messages = langgraph_messages_history + [current_turn_human_message]
@@ -83,9 +89,16 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
 
     # 5. Return the formatted response for Gradio ChatInterface
     if image_path_for_turn and text_response_for_turn:
+        # Image and text: Gradio will use text_response_for_turn as caption/alt_text
         return (image_path_for_turn, text_response_for_turn)
-    elif image_path_for_turn:
-        return (image_path_for_turn,)
+    elif image_path_for_turn: # Only image was produced, text_response_for_turn is empty
+        # Extract the tool message content as the textual response
+        tool_message_text = "Image generated." # Default
+        for msg in new_messages_from_graph:
+            if isinstance(msg, ToolMessage) and msg.name == "midjourney_image_generator":
+                tool_message_text = str(msg.content) # e.g., "Successfully generated image... Saved as: ..."
+                break
+        return (image_path_for_turn, tool_message_text)
     elif text_response_for_turn:
         return text_response_for_turn
     else:
@@ -108,16 +121,15 @@ iface = gr.ChatInterface(
         height=600,
         label="Conversation",
         show_label=True,
-        render=False # Render manually for layout options if needed, but fine for ChatInterface
+        render=False, # Render manually for layout options if needed, but fine for ChatInterface
+        type="messages" # Use OpenAI-style message format
     ),
     textbox=gr.Textbox(
         placeholder="Type your message here...",
         container=False, # Part of ChatInterface's internal layout
         scale=7 # Relative width
     ),
-    retry_btn="Retry",
-    undo_btn="Delete Last Turn",
-    clear_btn="Clear Chat",
+    # retry_btn, undo_btn, clear_btn are typically default or managed by Chatbot in newer Gradio
     # theme="gradio/soft" # Optional: explore themes
 )
 
