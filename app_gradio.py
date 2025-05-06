@@ -45,17 +45,21 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
             if isinstance(content, str):
                 # Standard text response
                 text_for_ai_message = content
+            elif isinstance(content, tuple) and len(content) == 2:
+                # Check if content is a tuple like (text, list_of_file_dicts)
+                # This is how Gradio might store a message with text and files.
+                text_part, files_part = content
+                if isinstance(text_part, str):
+                    text_for_ai_message = text_part
+                # We primarily care about the text_part for AIMessage history.
+                # The existence of files_part confirms it was a multi-modal message.
             elif isinstance(content, list) and content:
-                # Check if it's the list-of-tuples format we return: [(filepath, caption)]
-                first_item = content[0]
-                if isinstance(first_item, tuple) and len(first_item) == 2:
-                    # Extract the caption (second element of the tuple) as the text content
-                    text_for_ai_message = str(first_item[1]) if first_item[1] else "Image generated."
-                # Add checks here if Gradio might store it differently, e.g., as List[Dict]
-                elif isinstance(first_item, dict) and "text" in first_item:
-                     text_for_ai_message = first_item["text"]
-                elif isinstance(first_item, dict) and "alt_text" in first_item: # Fallback
-                     text_for_ai_message = first_item["alt_text"]
+                # This is how Gradio might store a message with only files.
+                # Content would be like [{"file": path, "alt_text": caption}]
+                first_file_dict = content[0]
+                if isinstance(first_file_dict, dict):
+                    # Use alt_text as the textual representation for history if available
+                    text_for_ai_message = first_file_dict.get("alt_text") or first_file_dict.get("text") or "Image content"
 
             # Only add AIMessage to LangGraph history if we have text content
             if text_for_ai_message:
@@ -100,19 +104,27 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
 
     # 5. Return the formatted response for Gradio ChatInterface (type="messages" mode)
     # The function should return the *content* for the assistant's message.
-    # For text, it's a string. For files, let's try List[Tuple[str, str | None]].
+    # - For text-only: string
+    # - For image (with optional text): dict like {"text": str, "files": List[Dict]}
+    #   where file dict is {"file": path, "alt_text": caption}
+
     if image_path_for_turn and text_response_for_turn:
-        # Image and text: Return list with tuple (filepath, caption)
-        return [(image_path_for_turn, text_response_for_turn)]
-    elif image_path_for_turn: # Only image was produced, text_response_for_turn is empty
-        # Extract the tool message content as the caption
-        tool_message_text = "Image generated." # Default caption
-        for msg in new_messages_from_graph:
-            if isinstance(msg, ToolMessage) and msg.name == "midjourney_image_generator":
-                tool_message_text = str(msg.content) # Use tool success message as caption
+        # Both LLM text and an image are present
+        return {
+            "text": text_response_for_turn,
+            "files": [{"file": image_path_for_turn, "alt_text": "Generated image"}]
+        }
+    elif image_path_for_turn: # Only image was produced, text_response_for_turn from LLM is empty
+        # Use the tool's success message as the primary text content.
+        tool_message_as_text = "Image generated." # Default
+        for msg_item in new_messages_from_graph: # Renamed loop variable
+            if isinstance(msg_item, ToolMessage) and msg_item.name == "midjourney_image_generator":
+                tool_message_as_text = str(msg_item.content)
                 break
-        # Image only: Return list with tuple (filepath, caption)
-        return [(image_path_for_turn, tool_message_text)]
+        return {
+            "text": tool_message_as_text, # This text will be displayed with the image
+            "files": [{"file": image_path_for_turn, "alt_text": "Generated image"}] # alt_text for accessibility
+        }
     elif text_response_for_turn:
         # Text only: Return the string content directly
         return text_response_for_turn
