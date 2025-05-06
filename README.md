@@ -33,16 +33,16 @@ This project demonstrates a simple LangGraph agent capable of using a (mock) Mid
     # On Debian/Ubuntu: sudo apt-get install graphviz graphviz-dev
     # On Fedora: sudo dnf install graphviz graphviz-devel
     ```
-    This will install all dependencies listed in `pyproject.toml`, including those needed for diagram generation (`pygraphviz`, `matplotlib`, `pillow`).
+    This will install all dependencies listed in `pyproject.toml`, including those needed for diagram generation (`pygraphviz`, `matplotlib`, `pillow`) and the Stability AI tool (`requests`).
 
 4.  **Set Up Environment Variables:**
     Create a `.env` file in the root directory of the project:
     ```env
     OPENAI_API_KEY="your_openai_api_key_here"
-    # If your actual Midjourney tool requires an API key:
-    # MIDJOURNEY_API_KEY="your_midjourney_api_key_here"
+    # The image generation tool now uses Stability AI:
+    STABILITY_API_KEY="your_stability_ai_api_key_here"
     ```
-    Replace `"your_openai_api_key_here"` with your actual OpenAI API key.
+    Replace the placeholder keys with your actual API keys. You can get a Stability AI key from their website.
 
 ## Running the Agent
 

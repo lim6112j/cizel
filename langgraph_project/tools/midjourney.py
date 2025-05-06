@@ -1,33 +1,68 @@
 import os
+import requests
+import re
 from langchain_core.tools import tool
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-# This is a placeholder for a real Midjourney API client.
-# In a real scenario, you would use a library or directly call the Midjourney API.
-# You might need an API key, e.g., os.getenv("MIDJOURNEY_API_KEY")
-
 @tool
 def midjourney_image_generator(prompt: str) -> str:
     """
-    Generates an image using a conceptual Midjourney API based on the provided prompt.
-    This is a mock tool and returns a placeholder image URL.
+    Generates an image using the Stability AI API based on the provided prompt
+    and saves it locally. Requires STABILITY_API_KEY environment variable.
     """
+    api_key = os.getenv("STABILITY_API_KEY")
+    if not api_key:
+        return "Error: STABILITY_API_KEY environment variable not set."
     if not prompt:
-        return "Error: Prompt cannot be empty for Midjourney image generation."
+        return "Error: Prompt cannot be empty for image generation."
 
-    print(f"🎨 [Midjourney Tool] Received request to generate image for prompt: '{prompt}'")
-    
-    # Simulate API call and image generation
-    # In a real implementation:
-    # api_key = os.getenv("MIDJOURNEY_API_KEY")
-    # client = MidjourneyClient(api_key=api_key)
-    # image_url = client.generate(prompt)
-    
-    mock_image_url = f"https://example.com/mock_image_{prompt.lower().replace(' ', '_')}.png"
-    response_message = f"Successfully generated mock image for '{prompt}'. URL: {mock_image_url}"
-    
-    print(f"🖼️ [Midjourney Tool] {response_message}")
-    return response_message
+    print(f"🎨 [Stability AI Tool] Received request for prompt: '{prompt}'")
+
+    # Sanitize prompt for use in filename
+    safe_prompt = re.sub(r'[^\w\-]+', '_', prompt.lower())
+    output_filename = f"./generated_image_{safe_prompt[:50]}.webp" # Limit filename length
+
+    try:
+        response = requests.post(
+            "https://api.stability.ai/v2beta/stable-image/generate/core",
+            headers={
+                "authorization": f"Bearer {api_key}",
+                "accept": "image/*"
+            },
+            files={"none": ''}, # Required by the API
+            data={
+                "prompt": prompt,
+                "output_format": "webp", # Or png, jpeg
+                # Add other parameters like aspect_ratio, style_preset etc. if needed
+                # "aspect_ratio": "16:9"
+            },
+            timeout=60 # Add a timeout
+        )
+
+        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+
+        # Save the image
+        with open(output_filename, 'wb') as file:
+            file.write(response.content)
+
+        success_message = f"Successfully generated image for '{prompt}'. Saved as: {output_filename}"
+        print(f"🖼️ [Stability AI Tool] {success_message}")
+        return success_message
+
+    except requests.exceptions.RequestException as e:
+        error_message = f"Error calling Stability AI API: {e}"
+        print(f"❌ [Stability AI Tool] {error_message}")
+        # Attempt to get more details from response if available
+        try:
+            error_details = response.json()
+            error_message += f" - Details: {error_details}"
+        except: # Handle cases where response is not JSON or doesn't exist
+             pass
+        return error_message
+    except Exception as e:
+        error_message = f"An unexpected error occurred: {e}"
+        print(f"❌ [Stability AI Tool] {error_message}")
+        return error_message
