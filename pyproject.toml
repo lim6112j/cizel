@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.8.0", # For drawing the graph
     "pillow>=10.0.0", # For handling the image output
     "requests>=2.20.0", # For making HTTP requests to Stability AI
+    "gradio>=4.0.0", # For the web chat interface
 ]
 
 [build-system]

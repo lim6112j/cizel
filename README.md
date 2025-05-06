@@ -33,7 +33,7 @@ This project demonstrates a simple LangGraph agent capable of using a (mock) Mid
     # On Debian/Ubuntu: sudo apt-get install graphviz graphviz-dev
     # On Fedora: sudo dnf install graphviz graphviz-devel
     ```
-    This will install all dependencies listed in `pyproject.toml`, including those needed for diagram generation (`pygraphviz`, `matplotlib`, `pillow`) and the Stability AI tool (`requests`).
+    This will install all dependencies listed in `pyproject.toml`, including those needed for diagram generation (`pygraphviz`, `matplotlib`, `pillow`), the Stability AI tool (`requests`), and the web interface (`gradio`).
 
 4.  **Set Up Environment Variables:**
     Create a `.env` file in the root directory of the project:
@@ -46,22 +46,37 @@ This project demonstrates a simple LangGraph agent capable of using a (mock) Mid
 
 ## Running the Agent
 
-Once the setup is complete, you can run the agent using the `run.py` script:
+This project offers two ways to interact with the agent:
+
+### 1. Web Chat Interface (Recommended)
+
+Once the setup is complete, you can start the Gradio web interface:
+
+```bash
+python app_gradio.py
+```
+
+This will launch a local web server (usually at `http://127.0.0.1:7860` or similar), which you can open in your browser to chat with the agent. The interface supports text conversation and image display if the agent generates an image.
+
+### 2. Command-Line Interface
+
+You can also run the agent using the `run.py` script for basic command-line interaction:
 
 ```bash
 python run.py
 ```
 
-The script will execute two predefined queries:
-1.  A request to generate an image, which should trigger the Midjourney tool.
-2.  A general question, which the LLM should answer directly.
+The `run.py` script will execute two predefined queries:
+1.  A request to generate an image.
+2.  A general question.
 
-It will also generate a `workflow_diagram.png` file in the project root, visualizing the structure of the LangGraph agent.
+The `run.py` script can also generate a `workflow_diagram.png` file (if uncommented) visualizing the LangGraph agent's structure.
 
 ## Project Structure
 
 -   `pyproject.toml`: Defines project metadata and dependencies (PEP 621 format).
--   `run.py`: The main script to execute the LangGraph agent.
+-   `app_gradio.py`: Script to launch the Gradio web chat interface.
+-   `run.py`: Script for command-line execution of the LangGraph agent.
 -   `langgraph_project/`: The core Python package for the LangGraph application.
     -   `__init__.py`: Initializes the `langgraph_project` package and exports the `app`.
     -   `agent.py`: Contains the definition of the agent's state, tools, model, nodes, and the graph itself.
