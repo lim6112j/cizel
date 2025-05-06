@@ -86,33 +86,15 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
     
     text_response_for_turn = text_response_for_turn.strip()
 
-    # 5. Return the formatted response for Gradio (assuming 3.x style ChatInterface)
-    #    - String for text-only response.
-    #    - Tuple (filepath, alt_text) for image response.
-
-    if image_path_for_turn: # A valid image path was extracted
-        # Determine the caption for the image.
-        # Prefer LLM's direct response if available, otherwise use tool's message.
-        caption_text = text_response_for_turn
-        if not caption_text: # LLM provided no text, use tool's output message
-            for msg_item in new_messages_from_graph:
-                if isinstance(msg_item, ToolMessage) and msg_item.name == "midjourney_image_generator":
-                    caption_text = str(msg_item.content) # This is "Successfully generated... Saved as: <path>"
-                    break
-        if not caption_text: # Fallback caption
-             caption_text = "Generated image"
-        
-        return (image_path_for_turn, caption_text) # Return as (filepath, alt_text) tuple
-    
-    elif text_response_for_turn: # No image, but there is text from the LLM
-        return text_response_for_turn
-    
-    else: # No image and no specific text from LLM (e.g., tool failed and LLM was silent)
-        # Check if the last message from the graph was a ToolMessage (likely an error message from the tool)
-        if new_messages_from_graph and isinstance(new_messages_from_graph[-1], ToolMessage):
-            return str(new_messages_from_graph[-1].content) # Return tool's error message
-        
-        return "Agent processed the request. (No specific text or image output for this turn)"
+    # 5. Return the formatted response for Gradio
+    # For Gradio 3.x compatibility, we need to return either a string or a tuple (image_path, caption)
+    if image_path_for_turn:
+        caption_text = text_response_for_turn or "Generated image"
+        # Return a tuple for image responses
+        return (image_path_for_turn, caption_text)
+    else:
+        # Return a string for text-only responses
+        return text_response_for_turn or "Agent processed the request."
 
 
 # Create the Gradio interface using gr.ChatInterface
@@ -129,16 +111,13 @@ iface = gr.ChatInterface(
         height=600,
         label="Conversation",
         show_label=True,
-        render=False # Render manually for layout options if needed, but fine for ChatInterface
-        # Removed type="messages" for Gradio 3.x compatibility; defaults to "tuples" or similar
+        # Explicitly using tuples format for Gradio 3.x compatibility
     ),
     textbox=gr.Textbox(
         placeholder="Type your message here...",
-        container=False, # Part of ChatInterface's internal layout
-        scale=7 # Relative width
+        container=False,
+        scale=7
     ),
-    # retry_btn, undo_btn, clear_btn are typically default or managed by Chatbot in newer Gradio
-    # theme="gradio/soft" # Optional: explore themes
 )
 
 if __name__ == "__main__":
