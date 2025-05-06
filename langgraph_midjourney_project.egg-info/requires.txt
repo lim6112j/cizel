@@ -7,3 +7,4 @@ pygraphviz>=1.12
 matplotlib>=3.8.0
 pillow>=10.0.0
 requests>=2.20.0
+gradio>=4.0.0
