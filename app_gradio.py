@@ -28,42 +28,24 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
     Handles a single turn of conversation with the LangGraph agent via Gradio.
     """
     # 1. Convert Gradio history and current user input to LangGraph message format
-    # With type="messages", history is List[Dict[str, str | List[Tuple[str|None, str|None]] | None]]
-    # Each dict is like: {"role": "user", "content": "Hi"} or
-    # {"role": "assistant", "content": "Hello"} or
-    # {"role": "assistant", "content": [("path/to/image.png", "alt_text_or_caption")]}
+    # Assuming Gradio 3.x style history: List[Tuple[user_msg_str | None, bot_msg_representation | None]]
     langgraph_messages_history: list[BaseMessage] = []
-    for message_dict in history:
-        role = message_dict.get("role")
-        content = message_dict.get("content")
-
-        if role == "user" and isinstance(content, str):
-            langgraph_messages_history.append(HumanMessage(content=content))
-        elif role == "assistant":
-            # Handle assistant message content for history reconstruction
-            text_for_ai_message = None
-            if isinstance(content, str):
-                # Standard text response
-                text_for_ai_message = content
-            elif isinstance(content, tuple) and len(content) == 2:
-                # Check if content is a tuple like (text, list_of_file_dicts)
-                # This is how Gradio might store a message with text and files.
-                text_part, files_part = content
-                if isinstance(text_part, str):
-                    text_for_ai_message = text_part
-                # We primarily care about the text_part for AIMessage history.
-                # The existence of files_part confirms it was a multi-modal message.
-            elif isinstance(content, list) and content:
-                # This is how Gradio might store a message with only files.
-                # Content would be like [{"file": path, "alt_text": caption}]
-                first_file_dict = content[0]
-                if isinstance(first_file_dict, dict):
-                    # Use alt_text as the textual representation for history if available
-                    text_for_ai_message = first_file_dict.get("alt_text") or first_file_dict.get("text") or "Image content"
-
-            # Only add AIMessage to LangGraph history if we have text content
-            if text_for_ai_message:
-                langgraph_messages_history.append(AIMessage(content=text_for_ai_message))
+    for user_msg_str, bot_msg_representation in history:
+        if user_msg_str: # User message
+            langgraph_messages_history.append(HumanMessage(content=user_msg_str))
+        
+        # Process bot message for history
+        text_content_for_history = None
+        if isinstance(bot_msg_representation, str):
+            # Bot response was plain text
+            text_content_for_history = bot_msg_representation
+        elif isinstance(bot_msg_representation, tuple) and len(bot_msg_representation) == 2:
+            # Bot response was likely an image tuple (filepath, alt_text)
+            # Use the alt_text as the content for AIMessage history
+            text_content_for_history = str(bot_msg_representation[1]) if bot_msg_representation[1] else "Image"
+        
+        if text_content_for_history:
+            langgraph_messages_history.append(AIMessage(content=text_content_for_history))
             else:
                 # If assistant message had no text (e.g., only image with no caption extracted)
                 # We might still want to represent it, or decide the LLM doesn't need it.
@@ -102,35 +84,32 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
     
     text_response_for_turn = text_response_for_turn.strip()
 
-    # 5. Return the formatted response for Gradio ChatInterface (type="messages" mode)
-    # The function should return the *content* for the assistant's message.
-    # - For text-only: string
-    # - For image (with optional text): dict like {"text": str, "files": List[Dict]}
-    #   where file dict is {"file": path, "alt_text": caption}
+    # 5. Return the formatted response for Gradio (assuming 3.x style ChatInterface)
+    #    - String for text-only response.
+    #    - Tuple (filepath, alt_text) for image response.
 
-    if image_path_for_turn and text_response_for_turn:
-        # Both LLM text and an image are present
-        return {
-            "text": text_response_for_turn,
-            "files": [{"file": image_path_for_turn, "alt_text": "Generated image"}]
-        }
-    elif image_path_for_turn: # Only image was produced, text_response_for_turn from LLM is empty
-        # Use the tool's success message as the primary text content.
-        tool_message_as_text = "Image generated." # Default
-        for msg_item in new_messages_from_graph: # Renamed loop variable
-            if isinstance(msg_item, ToolMessage) and msg_item.name == "midjourney_image_generator":
-                tool_message_as_text = str(msg_item.content)
-                break
-        return {
-            "text": tool_message_as_text, # This text will be displayed with the image
-            "files": [{"file": image_path_for_turn, "alt_text": "Generated image"}] # alt_text for accessibility
-        }
-    elif text_response_for_turn:
-        # Text only: Return the string content directly
+    if image_path_for_turn: # A valid image path was extracted
+        # Determine the caption for the image.
+        # Prefer LLM's direct response if available, otherwise use tool's message.
+        caption_text = text_response_for_turn
+        if not caption_text: # LLM provided no text, use tool's output message
+            for msg_item in new_messages_from_graph:
+                if isinstance(msg_item, ToolMessage) and msg_item.name == "midjourney_image_generator":
+                    caption_text = str(msg_item.content) # This is "Successfully generated... Saved as: <path>"
+                    break
+        if not caption_text: # Fallback caption
+             caption_text = "Generated image"
+        
+        return (image_path_for_turn, caption_text) # Return as (filepath, alt_text) tuple
+    
+    elif text_response_for_turn: # No image, but there is text from the LLM
         return text_response_for_turn
-    else:
-        # Fallback if no discernible output, though agent should always respond.
-        # This might happen if the agent ends without a final AIMessage to the user.
+    
+    else: # No image and no specific text from LLM (e.g., tool failed and LLM was silent)
+        # Check if the last message from the graph was a ToolMessage (likely an error message from the tool)
+        if new_messages_from_graph and isinstance(new_messages_from_graph[-1], ToolMessage):
+            return str(new_messages_from_graph[-1].content) # Return tool's error message
+        
         return "Agent processed the request. (No specific text or image output for this turn)"
 
 
@@ -148,8 +127,8 @@ iface = gr.ChatInterface(
         height=600,
         label="Conversation",
         show_label=True,
-        render=False, # Render manually for layout options if needed, but fine for ChatInterface
-        type="messages" # Use OpenAI-style message format
+        render=False # Render manually for layout options if needed, but fine for ChatInterface
+        # Removed type="messages" for Gradio 3.x compatibility; defaults to "tuples" or similar
     ),
     textbox=gr.Textbox(
         placeholder="Type your message here...",
