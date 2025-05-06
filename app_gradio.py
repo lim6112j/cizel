@@ -88,9 +88,11 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
     text_response_for_turn = text_response_for_turn.strip()
 
     # 5. Return the formatted response for Gradio ChatInterface (type="messages" mode)
+    # The function should return the *content* for the assistant's message.
+    # For text, it's a string. For files, it's List[Dict[str, str | None]].
     if image_path_for_turn and text_response_for_turn:
         # Image and text: Return list containing a dict with "file" and "alt_text" keys
-        return [{"role": "assistant", "content": [{"file": image_path_for_turn, "alt_text": text_response_for_turn}]}]
+        return [{"file": image_path_for_turn, "alt_text": text_response_for_turn}]
     elif image_path_for_turn: # Only image was produced, text_response_for_turn is empty
         # Extract the tool message content as the caption
         tool_message_text = "Image generated." # Default caption
@@ -99,7 +101,7 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
                 tool_message_text = str(msg.content) # Use tool success message as caption
                 break
         # Image only: Return list containing a dict with "file" and "alt_text" keys
-        return [{"role": "assistant", "content": [{"file": image_path_for_turn, "alt_text": tool_message_text}]}]
+        return [{"file": image_path_for_turn, "alt_text": tool_message_text}]
     elif text_response_for_turn:
         # Text only: Return the string content directly
         return text_response_for_turn
