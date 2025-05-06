@@ -6,7 +6,7 @@ authors = [
     { name = "Your Name", email = "you@example.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10" # Updated minimum Python version for pygraphviz compatibility
 dependencies = [
     "langchain>=0.1.0,<0.2.0",
     "langgraph>=0.0.30,<0.1.0",
