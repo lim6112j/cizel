@@ -40,20 +40,31 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
         if role == "user" and isinstance(content, str):
             langgraph_messages_history.append(HumanMessage(content=content))
         elif role == "assistant":
+            # Handle assistant message content for history reconstruction
             text_for_ai_message = None
-            if isinstance(content, str): # Assistant's response was pure text
+            if isinstance(content, str):
+                # Standard text response
                 text_for_ai_message = content
-            elif isinstance(content, list) and content: # Assistant's response included an image
-                # content is like [(filepath, alt_text_or_None)]
-                # The alt_text is the textual part of the bot's response for that turn.
-                first_element = content[0] # Assuming one primary (image, caption) tuple per turn
-                if isinstance(first_element, tuple) and len(first_element) > 1 and first_element[1]:
-                    text_for_ai_message = str(first_element[1])
-                # If no alt_text (first_element[1] is None), text_for_ai_message remains None.
-                # This should be handled by ensuring our function always returns text with an image.
-            
-            if text_for_ai_message: # Only add AIMessage if we have text content
+            elif isinstance(content, list) and content:
+                # Check if it's the list-of-tuples format we return: [(filepath, caption)]
+                first_item = content[0]
+                if isinstance(first_item, tuple) and len(first_item) == 2:
+                    # Extract the caption (second element of the tuple) as the text content
+                    text_for_ai_message = str(first_item[1]) if first_item[1] else "Image generated."
+                # Add checks here if Gradio might store it differently, e.g., as List[Dict]
+                elif isinstance(first_item, dict) and "text" in first_item:
+                     text_for_ai_message = first_item["text"]
+                elif isinstance(first_item, dict) and "alt_text" in first_item: # Fallback
+                     text_for_ai_message = first_item["alt_text"]
+
+            # Only add AIMessage to LangGraph history if we have text content
+            if text_for_ai_message:
                 langgraph_messages_history.append(AIMessage(content=text_for_ai_message))
+            else:
+                # If assistant message had no text (e.g., only image with no caption extracted)
+                # We might still want to represent it, or decide the LLM doesn't need it.
+                # For now, we only add AIMessages with text content.
+                print(f"⚠️ Assistant message in history had no extractable text content: {content}")
 
     current_turn_human_message = HumanMessage(content=user_input)
     complete_input_messages = langgraph_messages_history + [current_turn_human_message]
