@@ -46,11 +46,13 @@ def chat_with_agent(user_input: str, history: list[list[str | tuple | None]]):
         
         if text_content_for_history:
             langgraph_messages_history.append(AIMessage(content=text_content_for_history))
-            else:
-                # If assistant message had no text (e.g., only image with no caption extracted)
-                # We might still want to represent it, or decide the LLM doesn't need it.
-                # For now, we only add AIMessages with text content.
-                print(f"⚠️ Assistant message in history had no extractable text content: {content}")
+        else:
+            # If assistant message had no text (e.g., only image with no caption extracted)
+            # We might still want to represent it, or decide the LLM doesn't need it.
+            # For now, we only add AIMessages with text content.
+            # The 'content' variable might not be defined here if bot_msg_representation was None or not a tuple/str
+            # Let's print bot_msg_representation to see what it was.
+            print(f"⚠️ Assistant message in history had no extractable text content. Bot representation: {bot_msg_representation}")
 
     current_turn_human_message = HumanMessage(content=user_input)
     complete_input_messages = langgraph_messages_history + [current_turn_human_message]
